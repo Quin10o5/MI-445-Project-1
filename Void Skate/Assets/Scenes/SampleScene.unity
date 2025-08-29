@@ -1536,6 +1536,7 @@ GameObject:
   - component: {fileID: 6159221618238547806}
   - component: {fileID: 7913138259109515160}
   - component: {fileID: 7913138259109515161}
+  - component: {fileID: 7913138259109515162}
   m_Layer: 0
   m_Name: Trick Indicator
   m_TagString: Untagged
@@ -1594,6 +1595,18 @@ MonoBehaviour:
   xBounds: {x: 0, y: 0}
   yBounds: {x: 0, y: 0}
   radius: 0
+--- !u!114 &7913138259109515162
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6411752717601887624}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d52e254f386eb3147915c3847d274e1b, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0
