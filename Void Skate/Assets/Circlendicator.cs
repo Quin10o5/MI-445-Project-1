@@ -14,7 +14,8 @@ public class CircleIndicator : MonoBehaviour
     public InputActionReference trickAction;
     public int trickTickRate = 8;
     public int rollingWindowSize = 15;
-    public Queue<GameObject> rollingWindow;
+    public Queue<GameObject> rollingWindowObj;
+    public Queue<Vector2> rollingWindowTrick;
     
     public Vector2 trickRaw;
     
@@ -22,6 +23,7 @@ public class CircleIndicator : MonoBehaviour
     public Vector2 yBounds;
     public float radius;
     private TrickAnalyzer trickAnalyzer;
+    
     
     
     // Start is called once before the first execution of Update after the MonoBehaviour is created
@@ -34,7 +36,8 @@ public class CircleIndicator : MonoBehaviour
         xBounds = new Vector2(corners[0].x, corners[2].x);
         yBounds = new Vector2(corners[0].y, corners[2].y);
         radius = (xBounds.y - xBounds.x) /2;
-        rollingWindow = new Queue<GameObject>(rollingWindowSize);
+        rollingWindowObj = new Queue<GameObject>(rollingWindowSize);
+        rollingWindowTrick = new Queue<Vector2>(rollingWindowSize);
         InvokeRepeating("RollingWindow", 1, (float)1/trickTickRate);
     }
 
@@ -63,12 +66,18 @@ public class CircleIndicator : MonoBehaviour
                 Vector2 center = transform.position;
                 Vector2 delta  = (Vector2)cursorVis.position - center;
                 cursorVis.position = center + delta.normalized * radius;
-                rollingWindow.Enqueue(Instantiate(cursorClone, cursorVis.position, cursorVis.rotation, transform));
-                if(rollingWindow.Count > rollingWindowSize) Destroy(rollingWindow.Dequeue());
+                rollingWindowObj.Enqueue(Instantiate(cursorClone, cursorVis.position, cursorVis.rotation, transform));
+                rollingWindowTrick.Enqueue(trickRaw);
+                if(rollingWindowObj.Count > rollingWindowSize)
+                {
+                    Destroy(rollingWindowObj.Dequeue());
+                    rollingWindowTrick.Dequeue();
+                }
             }
 
-            var snapshot = rollingWindow.ToArray();
-            trickAnalyzer.AnalyzeSnapshot(snapshot);
+            var snapshot1 = rollingWindowObj.ToArray();
+            var snapshot2 = rollingWindowTrick.ToArray();
+            trickAnalyzer.AnalyzeSnapshot(snapshot1, snapshot2);
             
             
             
@@ -79,9 +88,14 @@ public class CircleIndicator : MonoBehaviour
 
     void RollingWindow()
     {
-        rollingWindow.Enqueue(Instantiate(cursorClone, cursorVis.position, cursorVis.rotation, transform));
-        if(rollingWindow.Count > rollingWindowSize) Destroy(rollingWindow.Dequeue());
-        Debug.Log(rollingWindow.Count);
+        rollingWindowObj.Enqueue(Instantiate(cursorClone, cursorVis.position, cursorVis.rotation, transform));
+        rollingWindowTrick.Enqueue(trickRaw);
+        if(rollingWindowObj.Count > rollingWindowSize)
+        {
+            Destroy(rollingWindowObj.Dequeue());
+            rollingWindowTrick.Dequeue();
+        }
+        //Debug.Log(rollingWindowObj.Count);
     }
     
 }

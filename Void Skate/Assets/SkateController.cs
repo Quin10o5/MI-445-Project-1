@@ -3,6 +3,7 @@ using UnityEngine.Diagnostics;
 using UnityEngine.InputSystem;
 public class SkateController : MonoBehaviour
 {
+    public static SkateController instance;
     public float pushForce;
     private Controls _controls;
     private Rigidbody rb;
@@ -68,6 +69,7 @@ public class SkateController : MonoBehaviour
     public float bankKd = 2f;
     void Awake()
     {
+        instance = this;
         _controls = new Controls();
         rb = GetComponent<Rigidbody>();
         if (steerAction != null) steerAction.action.Enable();
@@ -265,6 +267,11 @@ public class SkateController : MonoBehaviour
         Vector3 planar = Vector3.ProjectOnPlane(rb.linearVelocity, Vector3.up);
         Vector3 lateral = planar - Vector3.Project(planar, fwd);
         rb.AddForce(-lateral * lateralDamp, ForceMode.Force);
+    }
+
+    public void PopUp(float force)
+    {
+        rb.AddForce(groundNormal * force, ForceMode.Impulse);
     }
 
 
