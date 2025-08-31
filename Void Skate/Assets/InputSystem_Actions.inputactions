@@ -81,7 +81,16 @@
                     "name": "Sprint",
                     "type": "Button",
                     "id": "641cd816-40e6-41b4-8c3d-04687c349290",
-                    "expectedControlType": "Button",
+                    "expectedControlType": "",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false
+                },
+                {
+                    "name": "Session",
+                    "type": "Button",
+                    "id": "0dac1dbc-f3fe-45b7-88a1-f27d7a577979",
+                    "expectedControlType": "",
                     "processors": "",
                     "interactions": "",
                     "initialStateCheck": false
@@ -470,6 +479,39 @@
                     "processors": "",
                     "groups": "Keyboard&Mouse",
                     "action": "Push BFoot",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "f0d20afa-7b57-403e-b63b-3013a11830e5",
+                    "path": "<Gamepad>/dpad/up",
+                    "interactions": "Tap,Hold",
+                    "processors": "",
+                    "groups": ";Gamepad",
+                    "action": "Session",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "6cb30370-6a36-47c3-9214-4ef2fbe9cfda",
+                    "path": "",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "Session",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "67bf3501-cc07-495a-a353-c8718262cdff",
+                    "path": "",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "Session",
                     "isComposite": false,
                     "isPartOfComposite": false
                 }

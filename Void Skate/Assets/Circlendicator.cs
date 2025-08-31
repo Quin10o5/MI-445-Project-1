@@ -75,9 +75,14 @@ public class CircleIndicator : MonoBehaviour
                 }
             }
 
-            var snapshot1 = rollingWindowObj.ToArray();
-            var snapshot2 = rollingWindowTrick.ToArray();
-            trickAnalyzer.AnalyzeSnapshot(snapshot1, snapshot2);
+
+            if (rollingWindowObj.Count >= 15)
+            {
+                var snapshot1 = rollingWindowObj.ToArray();
+                var snapshot2 = rollingWindowTrick.ToArray();
+                trickAnalyzer.AnalyzeSnapshot(snapshot1, snapshot2);
+            }
+            
             
             
             

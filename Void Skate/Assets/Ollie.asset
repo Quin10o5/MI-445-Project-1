@@ -14,8 +14,9 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   trickName: Ollie
   needsGround: 1
-  popForce: 1.5
+  popForce: 6
   startPosition: {x: 0, y: -1}
   positions:
   - {x: 0, y: 1}
-  animation: {fileID: 0}
+  skaterAnimation: {fileID: 7400000, guid: 6c34594b449b65842ae16f27aa816472, type: 2}
+  boardAnimation: {fileID: 7400000, guid: df4707b1ee0ebaa49895c513f5d15ef8, type: 2}

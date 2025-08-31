@@ -5,6 +5,7 @@ using UnityEngine;
 
 public class TrickAnalyzer : MonoBehaviour
 {
+    public CircleIndicator circleIndicator;
     private SkateController skateController;
     public TrickBook tricks;
     
@@ -14,6 +15,9 @@ public class TrickAnalyzer : MonoBehaviour
     public Vector2[] trickVec;
     public float trickDelay;
     public bool lockTricks = false;
+
+    public Animator playerAnimator;
+    public Animator boardAnimator;
     
     // Start is called once before the first execution of Update after the MonoBehaviour is created
     void Start()
@@ -56,6 +60,8 @@ public class TrickAnalyzer : MonoBehaviour
                     if (WithinRange(allChecks[j], trickVecs[k]))
                     {
                         requiredPasses[allChecks[j]] = k;
+                        //Debug.Log($"Matched {trick.trickName} checkpoint {allChecks[j]} with sample {trickVecs[k]}"); 
+
                         break;
                     }
                 }
@@ -66,47 +72,65 @@ public class TrickAnalyzer : MonoBehaviour
             var hitIndex = new int[allChecks.Count];
             for (int j = 0; j < hitIndex.Length; j++) hitIndex[j] = -1;
 
+            int searchStart = 0; // move forward through samples
             for (int j = 0; j < allChecks.Count; j++)
             {
                 Vector2 target = allChecks[j];
-                for (int k = 0; k < trickVecs.Length; k++)
+                for (int k = searchStart; k < trickVecs.Length; k++)   // <-- start from last+1
                 {
-                    if (WithinRange(target, trickVecs[k])) { hitIndex[j] = k; break; }
+                    if (WithinRange(target, trickVecs[k]))
+                    {
+                        hitIndex[j] = k;
+                        searchStart = k + 1; // next targets must come later in time
+                        // Debug.Log($"Matched {trick.trickName} step {j} at sample {k}");
+                        break;
+                    }
                 }
             }
 
-            // Validate: every step hit, and indices strictly increasing
-            int last = -1;
+            // Validate: all found
             bool passed = true;
             for (int j = 0; j < hitIndex.Length; j++)
             {
-                int idx = hitIndex[j];
-                if (idx < 0 || idx <= last) { passed = false; break; }
-                last = idx;
+                if (hitIndex[j] < 0) { passed = false; break; }
             }
 
-            if (passed)
+
+            if (passed && !lockTricks)
             {
-                if(trick.needsGround && !skateController.grounded) continue;
+                if (trick.needsGround && !skateController.grounded) continue;
+
                 TryWrite(trick.trickName);
                 Debug.Log(trick.trickName);
+
                 skateController.PopUp(trick.popForce);
+
                 lockTricks = true;
-                Invoke("ReleaseTricks", trickDelay);
+                boardAnimator.SetTrigger(tricks.tricks[i].key);
+                playerAnimator.SetTrigger(tricks.tricks[i].key);
+                for ( i = 0; i < circleIndicator.rollingWindowObj.Count; i++)
+                {
+                    if (circleIndicator.rollingWindowObj.Count > 0) Destroy(circleIndicator.rollingWindowObj.Dequeue());
+                    if (circleIndicator.rollingWindowTrick.Count > 0) circleIndicator.rollingWindowTrick.Dequeue();
+                }
+                Invoke(nameof(ReleaseTricks), trickDelay);
+
+                return; // <-- exit AnalyzeSnapshot immediately on first trigger
             }
+
             
         }
         
-        
+         
     }
     
     void ReleaseTricks() => lockTricks = false;
 
-    bool WithinRange(Vector2 input, Vector2 comparison) 
+    bool WithinRange(Vector2 input, Vector2 comparison)
     {
-        if(Vector2.Distance(input, comparison) > forgiveness) return false;
-        return true;
+        return (input - comparison).sqrMagnitude <= forgiveness * forgiveness;
     }
+
 
     void TryWrite(string data)
     {

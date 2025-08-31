@@ -10,7 +10,8 @@ public class Trick : ScriptableObject
     public float popForce = 1;
     public Vector2 startPosition = new Vector2(0f, -1);
     public Vector2[] positions;
-    public AnimationClip animation; 
+    public AnimationClip skaterAnimation;
+    public AnimationClip boardAnimation;
 }
 
 
