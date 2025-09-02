@@ -2,19 +2,21 @@ using Unity.Cinemachine;
 using UnityEngine;
 using UnityEngine.Diagnostics;
 using UnityEngine.InputSystem;
+using UnityEngine.Splines;
+
 public class SkateController : MonoBehaviour
 {
     public CinemachineThirdPersonFollow cam;
     public float camDistance = 3.6f;
     public static SkateController instance;
     public Animator animator;
-    public float pushForce;
     private Controls _controls;
     private Rigidbody rb;
     private float _lastPushTime;
     public bool grounded = true;
     public float groundCheckRadius = 0.2f;
     public Transform groundRayPos;
+    public Transform groundRayPos2;
     public LayerMask groundMask;
     private Vector3 _groundNormal;
     public float rollingResistance = 0.2f;
@@ -23,9 +25,7 @@ public class SkateController : MonoBehaviour
     public float baseImpulse = 180f;     // N·s-ish feeling; scale to your RB mass
     
     public float cadenceSeconds = 0.42f; // time between effective pushes
-    public float perfectBeatSeconds = 0.84f; // every 2 beats (example)
-    public float perfectWindow = 0.08f;  // ± window for perfect
-    public float perfectBonus = 1.25f;   // multiplier
+
     public float uphillBonus = 1.1f;     // tiny boost pushing uphill
     public float downhillPenalty = 0.9f;
     public AnimationCurve impulseBySpeed;
@@ -49,29 +49,19 @@ public class SkateController : MonoBehaviour
     Vector3 right = Vector3.right;
     float speed = 0f;
     Vector3 planarV = Vector3.zero;
+    public float backsideTorque = 5;
     
     
     
     [Header("Curvature Limits")]
-    [Tooltip("Global ceiling on curvature (1/m). Sets tightest possible radius regardless of grip.")]
-    public float kappaMaxBase = 0.9f;  // 1/m → ~1.1 m min radius at low speeds
-    [Tooltip("Low-speed minimum curvature so you can still turn while crawling.")]
-    public float kappaLow = 0.35f;     // 1/m
-    [Tooltip("Below this speed, add pivot yaw so you can rotate in place.")]
-    public float pivotAssistFadeSpeed = 2.0f; // m/s
-    [Tooltip("Max yaw rate (rad/s) when stationary with full steer.")]
-    public float pivotYawRateMax = 3.5f;      // ~200 deg/s
+    public Vector2 torqueMinMax = new Vector2(0.1f, 0.2f);
+    public Vector2 speedMinMax = new Vector2(0.0f, 30f); 
+    public float airTurnMult = 1.6f;
 
-    [Header("Yaw Controller (about ground up)")]
-    public float yawKp = 6.0f;     // proportional on (ω_target - ω_now)
-    public float yawKd = 1.5f;     // damping on ω_now
+    public float grindForce = 10;
+    private Grinder grinder;
     
-    [Header("Bank / Lean")]
-    [Range(0f, 25f)] public float maxLeanDegrees = 10f;
-    [Tooltip("Fraction of the 'ideal' bank angle to apply (0..1).")]
-    [Range(0f, 1f)] public float bankStrength = 0.8f;
-    public float bankKp = 10f;
-    public float bankKd = 2f;
+  
     private float impulse;
     void Awake()
     {
@@ -80,6 +70,7 @@ public class SkateController : MonoBehaviour
         rb = GetComponent<Rigidbody>();
         if (steerAction != null) steerAction.action.Enable();
         rb.maxAngularVelocity = 50f;
+        grinder = GetComponent<Grinder>();
     }
 
     private void OnEnable()
@@ -103,33 +94,70 @@ public class SkateController : MonoBehaviour
     public float cameraSpeed = 2;
     void FixedUpdate()
     {
+        if (rb.linearVelocity.magnitude > speedMinMax.y) rb.linearVelocity = rb.linearVelocity.normalized * speedMinMax.y;
+        //Debug.Log(rb.linearVelocity.magnitude);
         if (Physics.Raycast(groundRayPos.position, Vector3.down, out RaycastHit hitInfo, groundCheckRadius, groundMask))
         {
-            grounded = true;
-            _groundNormal = hitInfo.normal;
-            ApplyRollingResistance(hitInfo);
-            KillLateralSlide(hitInfo);
-            ApplySteering(hitInfo);
-
-            desiredDistance = Utils.Remap(rb.linearVelocity.magnitude, 0f, 20, 0, camDistance);
-            desiredDistance += 2;
-            if(Vector3.Angle(rb.linearVelocity, fwd) > 90f) desiredDistance *= -1;
-            float camDist = cam.CameraDistance;
-            //Debug.Log(desiredDistance);
-            float distance = Mathf.Lerp(camDist, desiredDistance, cameraSpeed * Time.deltaTime);
-            cam.CameraDistance = distance;
+            OnRay(hitInfo);
+        }
+        else if (Physics.Raycast(groundRayPos2.position, Vector3.down, out RaycastHit hitInfo2, groundCheckRadius, groundMask))
+        {
+            OnRay(hitInfo2);
         }
         else
-        {
+        { 
             _groundNormal = Vector3.up;
-            ApplySteering(hitInfo);
+            if (grinder.currentSpline == null|| grinder.currentSpline.Count == 0)
+            {
+                ApplySteering(hitInfo);
+            }
+            else
+            {
+                Grind(grinder.currentSpline, grinder.grindDir);
+            }
             grounded = false;
         }
     }
 
+
+    void OnRay(RaycastHit hitInfo)
+    {
+        grounded = true;
+        _groundNormal = hitInfo.normal;
+
+        if (grinder.currentSpline == null || grinder.currentSpline.Count == 0)
+        {
+            ApplyRollingResistance(hitInfo);
+            KillLateralSlide(hitInfo);
+            ApplySteering(hitInfo);
+        }
+        else
+        {
+           Grind(grinder.currentSpline, grinder.grindDir);
+        }
+        
+
+        desiredDistance = Utils.Remap(rb.linearVelocity.magnitude, 0f, 20, 0, camDistance);
+        desiredDistance += 2;
+        if(Vector3.Angle(rb.linearVelocity, fwd) > 90f) desiredDistance *= -1;
+        float camDist = cam.CameraDistance;
+        //Debug.Log(desiredDistance);
+        float distance = Mathf.Lerp(camDist, desiredDistance, cameraSpeed * Time.deltaTime);
+        cam.CameraDistance = distance;
+    }
+
+
+    void Grind(Spline spline, Vector3 dir)
+    {
+        Vector3 fwd    = dir.normalized;
+        Vector3 planar = Vector3.ProjectOnPlane(dir, Vector3.up);
+        rb.AddForce(planar * grinder.grindEntranceVel, ForceMode.Force);
+    }
+    
+
     void FrontPush(InputAction.CallbackContext context)
     {
-        Debug.Log("Front Push");
+        //Debug.Log("Front Push");
         if (!grounded) return;
         if (Time.time - _lastPushTime < cadenceSeconds) return; 
         
@@ -144,16 +172,10 @@ public class SkateController : MonoBehaviour
         // Diminishing returns
         float mul = impulseBySpeed.Evaluate(speed);
 
-        // Perfect timing bonus (hit near beat multiples)
-        float mod = Mathf.Repeat(beatClock, perfectBeatSeconds);
-        bool isPerfect = (mod <= perfectWindow || mod >= perfectBeatSeconds - perfectWindow);
-        if (isPerfect) mul *= perfectBonus;
-
-        // Slope modifier
-        float slope = Vector3.SignedAngle(fwd, Vector3.ProjectOnPlane(Vector3.down, groundNormal), Vector3.Cross(fwd, groundNormal));
-        // simpler: use dot with gravity
-        float downhill = Vector3.Dot(fwd, Physics.gravity.normalized); // >0 means facing down
-        float slopeMul = downhill > 0f ? downhillPenalty : uphillBonus;
+        Vector3 kindaDown = -transform.up + fwd;
+        float downhill = Vector3.Dot(kindaDown.normalized, Physics.gravity.normalized); // >0 = facing down
+        //Debug.Log(downhill);
+        float slopeMul = downhill > .71f ? downhillPenalty : uphillBonus;
 
         float surfaceMul = .5f;
 
@@ -167,18 +189,16 @@ public class SkateController : MonoBehaviour
     void ApplySteering(RaycastHit hit)
     {
         if (!grounded) up = Vector3.up;
+        else up = _groundNormal;
         // Build slope-aware basis no matter what; if airborne, up≈world up.
         fwd = Vector3.ProjectOnPlane(transform.forward, up).normalized;
-        if (fwd.sqrMagnitude < 1e-4f)
-            fwd = Vector3.ProjectOnPlane(transform.right, up).normalized;
         right = Vector3.Cross(up, fwd);
+        Debug.DrawLine(transform.position, transform.position + fwd * 2, Color.green);
+        Debug.DrawLine(transform.position, transform.position + right * 2, Color.red);
 
         planarV = Vector3.ProjectOnPlane(rb.linearVelocity, up);
         speed   = planarV.magnitude;
         
-        float forwardDot = (speed > 1e-3f) ? Vector3.Dot(planarV.normalized, fwd) : 1f; // -1..+1
-        float align = Mathf.Clamp01((forwardDot + 1f) * 0.5f);   // 0 when backwards, 0.5 at 90°, 1 when forward
-        float misalign = 1f - align;                              // 1 at 90°/backwards
 
 
         // --- 2) Read & filter steer ------------------------------------------
@@ -192,111 +212,30 @@ public class SkateController : MonoBehaviour
         steerRaw = Utils.ApplyDeadzone(steerRaw, deadzone);
         steerRaw = Utils.ApplyExpo(steerRaw, steerExpo);
         steerFiltered = Utils.ExpSmooth(steerFiltered, steerRaw, steerSmoothing, Time.fixedDeltaTime);
-
-        // --- 3) Grip and curvature limits ------------------------------------
-        float mu = 0.5f;
-        float gEff = Mathf.Abs(Vector3.Dot(Physics.gravity, up)); // = g * cos(theta) on slopes
-
-        // Traction-limited curvature cap (a_lat = v^2 * κ <= μ gEff  => κ <= μ gEff / v^2)
-        float kappaGrip = (speed > 0.15f) ? (mu * gEff) / (speed * speed) : 999f;
-
-        // Final κ_max: respect global base cap, but never below kappaLow
-        float kappaMax = Mathf.Min(kappaMaxBase, kappaGrip);
-        kappaMax = Mathf.Max(kappaMax, kappaLow);
-
-        float airMult = 1;
-        if (!grounded)
-        {
-            
-            airMult = 2f;
-            kappaMax *= airMult;
-        }
-
-        float kappaTarget = steerFiltered * kappaMax;
-
-        // --- 4) Target yaw rate & low-speed pivot assist ----------------------
-        float signedSpeed = Vector3.Dot(planarV, fwd);   // <0 when traveling backwards
-        // ground-driven yaw when aligned with travel
-        float omegaGround = signedSpeed * kappaTarget;
-
-// input-driven yaw when misaligned / in-air (doesn't vanish at 90°)
-        float airYawRateMax = pivotYawRateMax * airMult;     // reuse your numbers
-        float omegaAir = steerFiltered * airYawRateMax;
-
-// blend by misalignment; weight it more strongly in-air
-        float airBias = grounded ? 0.6f : 1.0f;              // tune: how much we trust air control
-        float omegaTarget = Mathf.Lerp(omegaGround, omegaAir, misalign * airBias);
         
-        if (speed < pivotAssistFadeSpeed)
-        {
-            float t = 1f - Mathf.Clamp01(speed / Mathf.Max(0.0001f, pivotAssistFadeSpeed));
-            omegaTarget = Mathf.Lerp(omegaTarget, steerFiltered * pivotYawRateMax * airMult, t);
-        }
+        float desiredTorque = Utils.Remap(steerFiltered, -1f, 1, -torqueMinMax.y, torqueMinMax.y);
+        float speedMult;
+        if (!grounded) speedMult = Utils.Remap(0, speedMinMax.x, speedMinMax.y, 1, 0);
+            else speedMult = Utils.Remap(rb.linearVelocity.magnitude, speedMinMax.x, speedMinMax.y, 1, 0 );
+        
+        if (!grounded) speedMult *= airTurnMult;
+        rb.AddTorque(up * desiredTorque * speedMult, ForceMode.Impulse);
 
-
-
-        // --- 5) Apply lateral (centripetal) force to carve --------------------
-        if (grounded && speed > 0.01f)
-        {
-            float aLatCmd = speed * speed * kappaTarget;                 // desired
-            float aLatCap = mu * gEff;                                   // traction budget
-            float aLat = Mathf.Clamp(aLatCmd, -aLatCap, aLatCap);        // grip-limited
-            Vector3 aLatVec = right * (Mathf.Sign(kappaTarget) * Mathf.Abs(aLat)); // toward center of turn
-
-            rb.AddForce(aLatVec, ForceMode.Acceleration);
-
-            // optional gentle sideways bleed to prevent crab
-            Vector3 lateral = planarV - Vector3.Project(planarV, fwd);
-            if (lateralDamp > 0f && lateral.sqrMagnitude > 1e-4f)
-                rb.AddForce(-lateral * lateralDamp, ForceMode.Acceleration);
-        }
-
-        // --- 6) Yaw PD to track omegaTarget ----------------------------------
-        // current yaw rate is the component of angular velocity about 'up'
-        float omegaNow = Vector3.Dot(rb.angularVelocity, up);
-        float yawTorque = yawKp * (omegaTarget - omegaNow) - yawKd * omegaNow;
-        rb.AddTorque(up * yawTorque, ForceMode.Acceleration);
-
-        // Small alignment torque so board faces travel (reduces crab at high v)
-
-    // only help-face the travel if we’re generally moving forward
-        if (speed > 0.2f && forwardDot > 0.2f)
-        {
-            Vector3 travelDir = planarV.normalized;
-            float alignSign  = Mathf.Sign(Vector3.SignedAngle(fwd, travelDir, up));
-            float alignAngle = Vector3.Angle(fwd, travelDir) * Mathf.Deg2Rad;
-            rb.AddTorque(up * (alignSign * alignAngle * 2.0f), ForceMode.Acceleration);
-        }
-
-        // --- 7) Bank / lean toward inside of turn ----------------------------
-        // Ideal bank: phi = atan(a_lat / gEff). Use commanded aLat (grip-limited) & scale.
-        float aLatIdeal = Mathf.Clamp(speed * speed * Mathf.Abs(kappaTarget), 0f, mu * gEff);
-        float phiTarget = Mathf.Atan2(aLatIdeal, Mathf.Max(0.001f, gEff)) * bankStrength; // radians
-        phiTarget = Mathf.Min(phiTarget, maxLeanDegrees * Mathf.Deg2Rad);
-
-        // Determine which side we’re banking toward (left/right turn)
-        float turnSign = Mathf.Sign(kappaTarget); // + left, - right (given right = up×fwd)
-        // target "up" vector is current up rotated around 'forward' by -turnSign*phi
-        Quaternion bankRot = Quaternion.AngleAxis(-turnSign * phiTarget * Mathf.Rad2Deg, fwd);
-        Vector3 targetUp = (bankRot * up).normalized;
-
-        // PD torque to align current up to targetUp, around axis perpendicular to both
-        Vector3 curUp = transform.rotation * Vector3.up;
-        Vector3 axis = Vector3.Cross(curUp, targetUp);
-        float ang = Mathf.Asin(Mathf.Clamp(axis.magnitude, -1f, 1f)); // radians (small-angle)
-        Vector3 axisN = (axis.sqrMagnitude > 1e-8f) ? axis.normalized : Vector3.zero;
-
-        // Project angular velocity onto that axis for damping
-        float angVelAlongAxis = Vector3.Dot(rb.angularVelocity, axisN);
-        Vector3 bankTorque = axisN * (ang * bankKp - angVelAlongAxis * bankKd);
-        if (axisN != Vector3.zero)
-        {
-            rb.AddTorque(bankTorque, ForceMode.Acceleration);
-            
-        }
+        
             
         
-    } 
+    }
+
+    public void BacksideTurnCheck()
+    {
+        if (Mathf.Abs(steerFiltered) > .4f)
+        {
+            float desiredTorque = Utils.Remap(steerFiltered, -1f, 1, -torqueMinMax.y, torqueMinMax.y);
+            rb.AddTorque(up * desiredTorque * backsideTorque, ForceMode.Impulse);
+        }
+        
+        
+    }
     void FRPush() =>rb.AddForce(fwd * impulse, ForceMode.Impulse);
     
     
@@ -321,13 +260,13 @@ public class SkateController : MonoBehaviour
         rb.AddForce(-lateral * lateralDamp, ForceMode.Force);
     }
 
-    public void PopUp(float force)
+    public void PopUp(float force) 
     {
         rb.AddForce(groundNormal * force, ForceMode.Impulse);
     }
 
 
-    void OnDrawGizmosSelected()
+    void OnDrawGizmos()
     {
         if(!Application.isPlaying) return;
         if(grounded) Gizmos.color = Color.green;

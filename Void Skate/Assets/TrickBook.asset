@@ -17,3 +17,5 @@ MonoBehaviour:
     trick: {fileID: 11400000, guid: aced8a68b3d2e17418b8021bdf835cb2, type: 2}
   - key: kck
     trick: {fileID: 11400000, guid: ae2c0b3a395c021429af7a7b2489913a, type: 2}
+  - key: kck
+    trick: {fileID: 11400000, guid: 6e264ea095310db4fad148b1ebdf1e10, type: 2}

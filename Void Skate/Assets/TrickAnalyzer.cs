@@ -108,6 +108,7 @@ public class TrickAnalyzer : MonoBehaviour
                 lockTricks = true;
                 boardAnimator.SetTrigger(tricks.tricks[i].key);
                 playerAnimator.SetTrigger(tricks.tricks[i].key);
+                skateController.BacksideTurnCheck();
                 for ( i = 0; i < circleIndicator.rollingWindowObj.Count; i++)
                 {
                     if (circleIndicator.rollingWindowObj.Count > 0) Destroy(circleIndicator.rollingWindowObj.Dequeue());
